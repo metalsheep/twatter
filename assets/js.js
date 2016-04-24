@@ -105,10 +105,7 @@ function addButtonActions(twat){
 }
 
 function sendDelete(id, callback){
-    var deleteTweet = new XMLHttpRequest();
-    deleteTweet.open("GET", "/delete?id="+id);
-    deleteTweet.onload = callback;
-    deleteTweet.send();
+    sendReq("GET", "/delete", makeQString({id: id}), callback);
 }
 
 function Twat(obj){
