@@ -1,29 +1,59 @@
 getPageTweets();
 
+var config = {
+    editmode:{
+        enabled: false,
+        twatid: null
+    }
+};
+
+// Respond to submit button
 document.getElementById("tweet-form").addEventListener("submit", function(event){
     event.preventDefault();
     
-    var form = document.getElementById("tweet-form");
-    var postTweets = new XMLHttpRequest();
-    var body = document.getElementById("tweet-editor").value;
-    if(body){
-        if(form.name != ""){
-            // send and upate
-            postTweets.open("GET", "/edit?body=" + body + "&id=" + form.name);
-        } else {
-            // send a new tweet
-            postTweets.open("GET", "/create?body=" + body);
-        }
-        postTweets.onload = function(err){
-            document.getElementById("tweet-editor").value = "";
-        }
-        postTweets.send();
-        getPageTweets();
+    var body = document.getElementById("tweet-composer").value;
+    var twat = new Twat({body: body});
+    
+    var route;
+    
+    if(config.editmode.enabled) {
+        twat.id = config.editmode.twatid;
+        route = "/edit"
+        
+        // reset edit mode
+        config.editmode.twatid = undefined;
+        config.editmode.enabled = false;
+    } else {
+        route = "/create"
     }
+    
+    var qString = makeQString(twat);
+    sendReq("GET", route, qString, function(err) {
+        // clear the tweet composer
+        document.getElementById("tweet-composer").value = "";
+        getPageTweets();
+    });
 });
 
-var pageTweets;
+function makeQString(twat) {
+    var qString = "";
+    for(var key in twat) {
+        if(twat[key]) {
+            if(qString != "") {
+                qString += "&";
+            }
+            qString += key + "=" + twat[key];
+        }
+    }
+    return qString
+}
 
+function sendReq(method, route, qString, callback) {
+    var req = new XMLHttpRequest();
+    req.open(method, route + "?" + qString);
+    req.onload = callback;
+    req.send();
+}
 
 function getPageTweets(){
     var getTweets = new XMLHttpRequest();
@@ -36,55 +66,53 @@ function getPageTweets(){
 }
 
 function renderTweets(data){
-    var tweetsContainer = document.getElementById("tweets");
+    var tweetsContainer = document.getElementById("feed");
     tweetsContainer.innerHTML = "";
-    pageTweets = data.posts;
+    var pageTweets = data.posts;
     for(var twat in pageTweets){
-        var tweetData = pageTweets[twat]
-        tweetsContainer.innerHTML += 
-            "<div id = twat_" +
-            tweetData.id + ">" + 
-            tweetData.body +
-            '<button class = "edit-button" type = "button" id="' + tweetData.id + '">Edit</button>' +
-            '<button class = "delete-button" type = "button" id="' + tweetData.id + '">Delete</button>'
-            "</div>";
+        renderTwat(tweetsContainer, new Twat(pageTweets[twat]));
+        addButtonActions(pageTweets[twat]);
     }
-    addDeleteButtons();
-    addEditButton();
 }
-function addDeleteButtons(){
-    var tweetsContainer = document.getElementById("tweets");    
-    var deleteButtons = document.getElementsByClassName("delete-button");
-    for(var i = 0; i < deleteButtons.length; i++){
-        var button = deleteButtons.item(i);
-        button.addEventListener("click", function(){
-            var childID = "twat_" + this.id;
-            var child = document.getElementById(childID)
-            tweetsContainer.removeChild(child);
-            sendDelete(this.id);
+
+function renderTwat(container, twat) {
+    var newTwat = document.createElement("div");
+    newTwat.id = "twat_" + twat.id;
+    newTwat.innerHTML = twat.body +
+        '<button class = "edit-button" type = "button" id=edit_' + twat.id + '>Edit</button>' +
+        '<button class = "delete-button" type = "button" id=delete_' + twat.id + '>Delete</button>'
+    container.appendChild(newTwat);
+}
+
+function addButtonActions(twat){
+    var divId = "twat_" + twat.id
+    var editId = "edit_" + twat.id;
+    var deleteId = "delete_" + twat.id;
+    var container = document.getElementById("feed");
+    document.getElementById(editId).addEventListener("click", function () {
+        config.editmode.enabled = true;
+        config.editmode.twatid = twat.id;
+        // remove the twat from the feed
+        container.removeChild(document.getElementById(divId));
+        // add it to the composer
+        document.getElementById("tweet-composer").value = twat.body;
+    });
+    document.getElementById(deleteId).addEventListener("click", function () {
+        sendDelete(twat.id, function() {
+            container.removeChild(document.getElementById(divId));
         });
-    }
+    });
 }
-function addEditButton(){
-    var tweetsContainer = document.getElementById("tweets");    
-    var editButtons = document.getElementsByClassName("edit-button");
-    for(var i = 0; i < editButtons.length; i++){
-        var button = editButtons.item(i);
-        button.addEventListener("click", function(){
-            var childID = "twat_" + this.id;
-            var child = document.getElementById(childID)
-            tweetsContainer.removeChild(child);
-            for(var i in pageTweets){
-                if(pageTweets[i].id==this.id){
-                    document.getElementById("tweet-editor").value = pageTweets[i].body;
-                    document.getElementById("tweet-form").name = pageTweets[i].id;
-                }
-            }
-        });
-    }
+
+function sendDelete(id, callback){
+    var deleteTweet = new XMLHttpRequest();
+    deleteTweet.open("GET", "/delete?id="+id);
+    deleteTweet.onload = callback;
+    deleteTweet.send();
 }
-function sendDelete(id){
-    var deleteTweets = new XMLHttpRequest();
-    deleteTweets.open("GET", "/delete?id="+id)
-    deleteTweets.send();
+
+function Twat(obj){
+    this.body = obj.body;
+    this.id = obj.id;
+    this.timeStamp = obj.timeStamp;
 }
